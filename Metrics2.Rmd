@@ -1,0 +1,202 @@
+---
+title: "Metrics"
+author: "Peter"
+date: "Friday, March 27, 2015"
+output: html_document
+---
+# Overview:
+
+```{r, echo=FALSE, results='hide'}
+library(knitr)
+suppressMessages(library(dplyr))
+library(ggplot2)
+```
+
+This document is created to give a brief summary of the possibilities to use R for calculating and reporting the metrics of a department within operations. At this moment there are 3 main elements that are used to "grade"" the performance of a department/team/agent, which will be discussed in this document, namely:
+
+ - Average number of cases handled per shift
+ - Average case Handle Time in minutes
+ - Customer Satisfaction scores
+ 
+As an addition, several extra plots are added to show:
+ 
+ - The number of cases per language
+ - The handle time per language, split in Email and Chat
+ - The number of cases handled per agent grouped by language
+ - The waiting time (in queue) per language, split in Email and Chat
+ 
+For this document 3 data sets are created:
+
+1. Pay2 (cases and there main features)
+2. CusSat (customer feedback per caseID, NoProduct, NoPolicy and NoAgent mean that there is dissatisfaction due to product, policy or agent.)
+3. Time (time registating per agent, hours worked versus TA/sickness)
+
+The 3 datasets look like:
+
+```{r}
+Pay2 <- read.csv("C:/Users/User/Desktop/Pay2.csv", sep=";")
+kable(head(Pay2), format = "latex")
+```
+
+```{r}
+CusSat <- read.csv("C:/Users/User/Desktop/CusSat.csv", sep=";")
+kable(head(CusSat), format = "latex")
+```
+
+```{r}
+time <- read.csv("C:/Users/User/Desktop/Time.csv", sep=";")
+Time <- data.frame(time)
+kable(head(Time), format = "latex")
+```
+
+#*The first element is the number of cases handled per shift.* 
+
+```{r, results='hide'}
+EE <-  Pay2 %>%
+  group_by(Agent) %>%
+  summarise(NumberOfCases = n())
+
+TA <- Time %>%
+  group_by(Agent) %>%
+  summarise(Shifts = sum(Netto.Hours, na.rm=TRUE)/8)
+
+length(Pay2$Agent); AveCasesperShift<- length(Pay2$Agent)/sum(TA$Shifts)
+```
+
+- The overall number of cases handled is `r length(Pay2$Agent)`, done in an overall number of netto shifts of `r sum(TA$Shifts)`.
+
+- This results in an average of `r AveCasesperShift` cases per shift.
+
+The number of cases separated by agent gives:
+```{r}
+kable(EE)
+```
+
+The number of shifts separated by agent gives:
+```{r}
+kable(TA)
+```
+
+The average number of cases per shift per agents:
+```{r}
+A1Cases<- length(Pay2$Agent[Pay2$Agent=="A1"])
+A2Cases<- length(Pay2$Agent[Pay2$Agent=="A2"])
+A3Cases<- length(Pay2$Agent[Pay2$Agent=="A3"])
+A4Cases<- length(Pay2$Agent[Pay2$Agent=="A4"])
+
+A1Shift <- TA[1, 2]
+A2Shift <- TA[2, 2]
+A3Shift <- TA[3, 2]
+A4Shift <- TA[4, 2]
+
+ScoreA1 <- A1Cases/A1Shift
+ScoreA2 <- A2Cases/A2Shift
+ScoreA3 <- A3Cases/A3Shift
+ScoreA4 <- A4Cases/A4Shift
+```
+
+- Agent 1 handled an average of `r ScoreA1` cases per shifts.
+- Agent 2 handled an average of `r ScoreA2` cases per shifts.
+- Agent 3 handled an average of `r ScoreA3` cases per shifts.
+- Agent 4 handled an average of `r ScoreA4` cases per shifts.
+
+A plot of cases per agent per type:
+
+```{r}
+PP <-  Pay2 %>%
+  group_by(Agent, Type) %>%
+  summarise(NumberOfCases = n())
+
+ggplot(PP, aes(x=Agent, y=NumberOfCases, fill=Type)) +
+  geom_bar(stat="identity") + coord_flip()
+```
+
+#*The second element is the Average Handle Time per case in minutes.*
+
+Below the overall average Handle Time and the Handle Time per agent:
+```{r}
+mean(Pay2$HandleTime)
+
+HH <- Pay2 %>%
+  group_by(Agent) %>%
+  summarise(avg_handle = mean(HandleTime, na.rm=TRUE))
+
+kable(HH)
+```
+
+
+A boxplot of the overall handle time of the team versus handle time per agent:
+
+```{r, echo=FALSE}
+par(mfrow=c(1,2))
+
+boxplot(Pay2$HandleTime, main="Team HandleTime", ylab="Time in minutes", ylim=c(0, 25), las=1)
+
+boxplot(Pay2$HandleTime ~ Pay2$Agent, main="Agent HandleTime", ylab="Time in minutes", ylim=c(0, 25), las=1)
+```
+
+
+#*The third element is the Customer Satisfaction per Agent* 
+
+The set goal for a 3 rating is to have equal or less than 3% dissatisfaction.
+
+Below a table with the number of "satified/Not agent to blame"" Customer reviews, versus the cases in which agent can be blamed. 
+
+And the same table expressed in percentages.
+
+```{r, echo=FALSE}
+
+tab<-table(CusSat$Agent, CusSat$NoAgent)
+
+tab
+
+kable(prop.table(tab, 1))
+
+
+```
+
+#*The number of cases per language:* 
+
+```{r}
+
+YY <-Pay2 %>%
+  group_by(Language) %>%
+  summarise(lang_count = n()) %>%
+  arrange(desc(lang_count))
+kable(YY)
+```
+
+In a barchart:
+
+```{r}
+
+y=table(Pay2$Language)
+
+barplot(y, main="Cases per Language", xlab="Language", ylab="Number of cases")
+```
+
+
+#*The handle time per language, split in Email and Chat:*
+```{r}
+a <- ggplot(Pay2, aes(y=HandleTime, x=Language, fill=Type))  + geom_boxplot()
+a
+
+```
+
+#*The number of cases handled per agent grouped by language:*
+```{r}
+FF <-Pay2 %>%
+  group_by(Agent, Language) %>%
+  summarise(lang_count = n())
+  
+ggplot(FF, aes(x=Agent, y=lang_count, fill=Language)) +
+  geom_bar(stat="identity") + coord_flip()
+```
+
+#*The waiting time (in queue) per language, split in Email and Chat:*
+```{r}
+b <- ggplot(Pay2, aes(y=Wait, x=Language, fill=Type))  + geom_boxplot()
+b
+
+```
+
